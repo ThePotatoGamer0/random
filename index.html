@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Image Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-transition { transition: opacity 1s ease-in-out; }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="bg-black overflow-hidden h-screen w-screen flex items-center justify-center">
+
+    <img id="displayImage" src="" alt="Random Image" class="h-full w-full object-contain fade-transition opacity-0" onclick="toggleSidebar()">
+
+    <div id="sidebar" class="sidebar fixed top-0 right-0 h-full w-64 bg-gray-900 text-white p-6 transform translate-x-full shadow-2xl z-10">
+        <h2 class="text-xl font-bold mb-6">Settings</h2>
+        
+        <div class="space-y-4">
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="sfwToggle" checked class="form-checkbox h-5 w-5 text-blue-600">
+                <span>Show SFW</span>
+            </label>
+
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="nsfwToggle" class="form-checkbox h-5 w-5 text-red-600">
+                <span class="text-red-400">Enable NSFW</span>
+            </label>
+
+            <div class="pt-6 border-t border-gray-700">
+                <p class="text-xs text-gray-500">Images cycle every 10s.</p>
+                <button onclick="fetchNextImage()" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Next Image</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hint" class="absolute bottom-4 text-white/20 text-sm pointer-events-none">Click image for settings</div>
+
+    <script>
+        const apiEndpoint = "https://api.potatogamer.uk/random";
+        let sidebarOpen = false;
+
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            document.getElementById('sidebar').style.transform = sidebarOpen ? 'translateX(0)' : 'translateX(100%)';
+        }
+
+        async function fetchNextImage() {
+            const isSfw = document.getElementById('sfwToggle').checked;
+            const isNsfw = document.getElementById('nsfwToggle').checked;
+
+            try {
+                const response = await fetch(`${apiEndpoint}?sfw=${isSfw}&nsfw=${isNsfw}`);
+                const data = await response.json();
+
+                if (data.url) {
+                    const imgElement = document.getElementById('displayImage');
+                    
+                    // Fade out
+                    imgElement.classList.add('opacity-0');
+                    
+                    // Wait for fade out, then swap source
+                    setTimeout(() => {
+                        imgElement.src = data.url;
+                        imgElement.onload = () => imgElement.classList.remove('opacity-0');
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error("Error fetching image:", error);
+            }
+        }
+
+        // Cycle every 10 seconds
+        setInterval(fetchNextImage, 10000);
+
+        // Initial Load
+        fetchNextImage();
+    </script>
+</body>
+</html>
