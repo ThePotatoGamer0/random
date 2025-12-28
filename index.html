@@ -8,63 +8,106 @@
     <style>
         .fade-transition { transition: opacity 0.8s ease-in-out; }
         .sidebar { transition: transform 0.3s ease-in-out; }
+        #categoryList::-webkit-scrollbar { width: 4px; }
+        #categoryList::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-black overflow-hidden h-screen w-screen flex items-center justify-center">
+<body class="bg-black overflow-hidden h-screen w-screen flex items-center justify-center font-sans">
+    
+    <div id="metadata" class="fixed bottom-8 left-8 z-10 text-white/40 text-sm transition-opacity duration-700 opacity-0 pointer-events-none">
+        <p id="metaAuthor" class="font-bold text-white/60"></p>
+        <p id="metaDate"></p>
+    </div>
 
     <img id="displayImage" src="" class="h-full w-full object-contain fade-transition opacity-0 cursor-pointer" onclick="toggleSidebar()">
 
-    <div id="sidebar" class="sidebar fixed top-0 right-0 h-full w-64 bg-gray-900/90 backdrop-blur-md text-white p-6 transform translate-x-full shadow-2xl z-20">
-        <h2 class="text-xl font-bold mb-4">Categories</h2>
-        <div id="categoryList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+    <div id="sidebar" class="sidebar fixed top-0 right-0 h-full w-80 bg-gray-900/95 backdrop-blur-md text-white p-8 transform translate-x-full shadow-2xl z-20">
+        <h2 class="text-2xl font-bold mb-8 border-b border-gray-700 pb-2">Settings</h2>
+        
+        <div class="mb-8">
+            <label class="block text-sm text-gray-400 mb-3 font-medium uppercase tracking-widest">Auto-Change: <span id="intervalVal" class="text-blue-400">10</span>s</label>
+            <input type="range" id="timerSlider" min="5" max="60" value="10" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="updateInterval(this.value)">
+        </div>
+
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Categories</h3>
+        <div id="categoryList" class="space-y-4 max-h-[40vh] overflow-y-auto mb-10 pr-2">
             <p class="text-gray-400 text-sm">Loading folders...</p>
         </div>
-        <button onclick="fetchNextImage()" class="mt-8 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold">Next Image</button>
+        
+        <div class="space-y-3">
+            <button onclick="fetchNextImage()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition-all transform active:scale-95 shadow-lg">Manual Next</button>
+            <button id="dlBtn" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download Image
+            </button>
+        </div>
     </div>
 
     <script>
         const apiBase = "https://api.potatogamer.uk";
         let sidebarOpen = false;
+        let slideTimer;
+        let currentInterval = 10000;
+        let currentImgUrl = "";
 
         function toggleSidebar() {
             sidebarOpen = !sidebarOpen;
             document.getElementById('sidebar').style.transform = sidebarOpen ? 'translateX(0)' : 'translateX(100%)';
         }
 
+        // --- Preferences Management ---
+        function setPref(name, val) { localStorage.setItem(name, JSON.stringify(val)); }
+        function getPref(name) { return JSON.parse(localStorage.getItem(name)); }
+
+        function updateInterval(val) {
+            document.getElementById('intervalVal').innerText = val;
+            currentInterval = val * 1000;
+            setPref('timer', val);
+            resetTimer();
+        }
+
+        function resetTimer() { 
+            clearInterval(slideTimer); 
+            slideTimer = setInterval(fetchNextImage, currentInterval); 
+        }
+
         async function loadCategories() {
             const isMobile = window.innerHeight > window.innerWidth;
+            const saved = getPref('cats') || [];
             try {
                 const response = await fetch(`${apiBase}/categories?mobile=${isMobile}`);
                 const categories = await response.json();
                 const container = document.getElementById('categoryList');
                 container.innerHTML = '';
-
+                
                 categories.forEach(cat => {
+                    const isNSFW = cat.toLowerCase() === 'nsfw';
+                    // NSFW off by default unless explicitly saved in local storage
+                    const isChecked = saved.length > 0 ? saved.includes(cat) : !isNSFW;
+                    
                     const label = document.createElement('label');
-                    label.className = "flex items-center space-x-3 cursor-pointer p-1 hover:bg-white/10 rounded";
-                    
-                    // Style NSFW differently if you want
-                    const textClass = cat.toLowerCase() === 'nsfw' ? 'text-red-400 font-medium' : '';
-                    
+                    label.className = "flex items-center space-x-3 cursor-pointer p-2 hover:bg-white/5 rounded-lg transition-colors";
                     label.innerHTML = `
-                        <input type="checkbox" name="category" value="${cat}" checked class="h-5 w-5 accent-blue-500">
-                        <span class="capitalize ${textClass}">${cat}</span>
+                        <input type="checkbox" name="category" value="${cat}" ${isChecked ? 'checked' : ''} onchange="savePrefs()" class="h-5 w-5 rounded bg-gray-800 border-gray-600 accent-blue-500">
+                        <span class="capitalize text-lg ${isNSFW ? 'text-red-400' : 'text-gray-300'}">${cat}</span>
                     `;
                     container.appendChild(label);
                 });
-            } catch (e) { console.error("Failed to load categories", e); }
+            } catch (e) { console.error("Category load error:", e); }
+        }
+
+        function savePrefs() {
+            const checked = Array.from(document.querySelectorAll('input[name="category"]:checked')).map(cb => cb.value);
+            setPref('cats', checked);
         }
 
         async function fetchNextImage() {
             const isMobile = window.innerHeight > window.innerWidth;
-            
-            // Collect all checked category boxes
             const checkedBoxes = document.querySelectorAll('input[name="category"]:checked');
             const categories = Array.from(checkedBoxes).map(cb => cb.value);
-
+            
             if (categories.length === 0) return;
 
-            // Build query string: ?categories=nature&categories=nsfw&mobile=false
             const params = new URLSearchParams();
             categories.forEach(c => params.append('categories', c));
             params.append('mobile', isMobile);
@@ -72,22 +115,46 @@
             try {
                 const response = await fetch(`${apiBase}/random?${params.toString()}`);
                 const data = await response.json();
-
+                
                 if (data.url) {
+                    currentImgUrl = data.url;
                     const img = document.getElementById('displayImage');
-                    img.classList.add('opacity-0');
+                    const meta = document.getElementById('metadata');
+                    
+                    img.classList.add('opacity-0'); 
+                    meta.classList.add('opacity-0');
                     
                     setTimeout(() => {
                         img.src = data.url;
-                        img.onload = () => img.classList.remove('opacity-0');
+                        // Display metadata parsed by the API
+                        document.getElementById('metaAuthor').innerText = `Created by: ${data.author || 'Unknown'}`;
+                        document.getElementById('metaDate').innerText = `Date: ${data.date || 'Unknown'}`;
+                        
+                        img.onload = () => { 
+                            img.classList.remove('opacity-0'); 
+                            meta.classList.remove('opacity-0'); 
+                        };
                     }, 800);
                 }
-            } catch (e) { console.error("Fetch failed", e); }
+            } catch (e) { console.error("Image fetch failed:", e); }
         }
 
-        // Initialize
+        // Open download link in a new tab
+        document.getElementById('dlBtn').onclick = () => {
+            if (!currentImgUrl) return;
+            window.open(currentImgUrl, '_blank');
+        };
+
+        // Initialize from saved settings
+        const savedT = getPref('timer'); 
+        if(savedT) { 
+            currentInterval = savedT * 1000; 
+            document.getElementById('timerSlider').value = savedT; 
+            document.getElementById('intervalVal').innerText = savedT; 
+        }
+
         loadCategories().then(() => fetchNextImage());
-        setInterval(fetchNextImage, 10000);
+        resetTimer();
     </script>
 </body>
 </html>
