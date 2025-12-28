@@ -14,23 +14,16 @@
 
     <img id="displayImage" src="" class="h-full w-full object-contain fade-transition opacity-0 cursor-pointer" onclick="toggleSidebar()">
 
-    <div id="sidebar" class="sidebar fixed top-0 right-0 h-full w-64 bg-gray-900/90 backdrop-blur-md text-white p-6 transform translate-x-full shadow-2xl z-10">
-        <h2 class="text-xl font-bold mb-6">Settings</h2>
-        <div class="space-y-4">
-            <label class="flex items-center space-x-3 cursor-pointer">
-                <input type="checkbox" id="sfwToggle" checked class="h-5 w-5">
-                <span>Show SFW</span>
-            </label>
-            <label class="flex items-center space-x-3 cursor-pointer">
-                <input type="checkbox" id="nsfwToggle" class="h-5 w-5">
-                <span class="text-red-400">Show NSFW</span>
-            </label>
-            <button onclick="fetchNextImage()" class="mt-8 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold">Next Image</button>
+    <div id="sidebar" class="sidebar fixed top-0 right-0 h-full w-64 bg-gray-900/90 backdrop-blur-md text-white p-6 transform translate-x-full shadow-2xl z-20">
+        <h2 class="text-xl font-bold mb-4">Categories</h2>
+        <div id="categoryList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+            <p class="text-gray-400 text-sm">Loading folders...</p>
         </div>
+        <button onclick="fetchNextImage()" class="mt-8 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold">Next Image</button>
     </div>
 
     <script>
-        const apiBase = "https://api.potatogamer.uk/random";
+        const apiBase = "https://api.potatogamer.uk";
         let sidebarOpen = false;
 
         function toggleSidebar() {
@@ -38,15 +31,46 @@
             document.getElementById('sidebar').style.transform = sidebarOpen ? 'translateX(0)' : 'translateX(100%)';
         }
 
-        async function fetchNextImage() {
-            const isSfw = document.getElementById('sfwToggle').checked;
-            const isNsfw = document.getElementById('nsfwToggle').checked;
-            
-            // Auto-detect mobile based on aspect ratio
+        async function loadCategories() {
             const isMobile = window.innerHeight > window.innerWidth;
+            try {
+                const response = await fetch(`${apiBase}/categories?mobile=${isMobile}`);
+                const categories = await response.json();
+                const container = document.getElementById('categoryList');
+                container.innerHTML = '';
+
+                categories.forEach(cat => {
+                    const label = document.createElement('label');
+                    label.className = "flex items-center space-x-3 cursor-pointer p-1 hover:bg-white/10 rounded";
+                    
+                    // Style NSFW differently if you want
+                    const textClass = cat.toLowerCase() === 'nsfw' ? 'text-red-400 font-medium' : '';
+                    
+                    label.innerHTML = `
+                        <input type="checkbox" name="category" value="${cat}" checked class="h-5 w-5 accent-blue-500">
+                        <span class="capitalize ${textClass}">${cat}</span>
+                    `;
+                    container.appendChild(label);
+                });
+            } catch (e) { console.error("Failed to load categories", e); }
+        }
+
+        async function fetchNextImage() {
+            const isMobile = window.innerHeight > window.innerWidth;
+            
+            // Collect all checked category boxes
+            const checkedBoxes = document.querySelectorAll('input[name="category"]:checked');
+            const categories = Array.from(checkedBoxes).map(cb => cb.value);
+
+            if (categories.length === 0) return;
+
+            // Build query string: ?categories=nature&categories=nsfw&mobile=false
+            const params = new URLSearchParams();
+            categories.forEach(c => params.append('categories', c));
+            params.append('mobile', isMobile);
 
             try {
-                const response = await fetch(`${apiBase}?sfw=${isSfw}&nsfw=${isNsfw}&mobile=${isMobile}`);
+                const response = await fetch(`${apiBase}/random?${params.toString()}`);
                 const data = await response.json();
 
                 if (data.url) {
@@ -61,8 +85,9 @@
             } catch (e) { console.error("Fetch failed", e); }
         }
 
+        // Initialize
+        loadCategories().then(() => fetchNextImage());
         setInterval(fetchNextImage, 10000);
-        fetchNextImage();
     </script>
 </body>
 </html>
